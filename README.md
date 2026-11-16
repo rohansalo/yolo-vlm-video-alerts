@@ -17,7 +17,7 @@ video source ─► capture ─► YOLO + ByteTrack ─► zone / motion events 
 
 YOLO decides **whether** something happened; the VLM only explains **what** happened. That keeps
 it fast, cheap on API credits, and far less prone to hallucinated alerts than asking a VLM about
-every frame.
+every frame. See [How it works](#how-it-works-yolo--vision-language-models) for the technical details.
 
 ## Setup
 
@@ -126,6 +126,118 @@ python -m vision_agent.run --source 0 --webhook "https://YOUR-N8N/webhook/vision
 Webhook payload fields: `ts`, `type`, `zone`, `object_class`, `track_id`, `confidence`, `speed`, `box`,
 `description`, `vlm_latency_s`, `event_id`, `session_id`, `snapshot`, `image_base64`
 (plus `question` for `question_yes`).
+
+## How it works: YOLO + vision-language models
+
+### What is a vision-language model?
+
+A vision-language model (VLM) is a large language model that can also *see*. Most VLMs share the
+same three-part design:
+
+```
+image  ──► vision encoder (ViT) ──► projector ──► visual tokens ─┐
+                                                                  ├─► language model ──► "A person in a red
+prompt ──► tokenizer ─────────────────────────────► text tokens ─┘     (decoder)          jacket is waiting…"
+```
+
+1. **Vision encoder** — a Vision Transformer cuts the image into small patches and turns each patch
+   into an embedding vector that captures what is in it.
+2. **Projector** — a small network maps those image embeddings into the same vector space as the
+   language model's word embeddings, so the picture becomes a sequence of "visual tokens".
+3. **Language model** — reads the visual tokens and your text prompt together and generates the
+   answer one token at a time, exactly like a chatbot.
+
+Because it is trained on huge sets of image–text pairs and instructions, a VLM can describe scenes,
+answer open-ended questions, read text in the image and reason about relationships ("a person
+*holding* a phone", "the door is *open*") — things a fixed-class detector cannot express.
+
+That flexibility has costs, which is why this project does not use a VLM alone:
+
+| | YOLO (local detector) | VLM (NVIDIA NIM) |
+|---|---|---|
+| Output | boxes + 80 fixed classes, track IDs | free-form text |
+| Speed | real-time on a laptop CPU (~10+ fps) | ~1–5 s per request over the network |
+| Cost | free after download | one API request per image |
+| Understands | *what* and *where* | *what is happening* and *why it matters* |
+| Typical failure | missed or flickering boxes | confident but wrong descriptions (hallucination) |
+
+So the two are combined: **YOLO runs on every frame and decides when something happened; the VLM is
+called only at those moments to explain it.**
+
+### The model
+
+The default model is `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, called through NVIDIA NIM's
+hosted, OpenAI-compatible endpoint. As its name indicates, it has 30B parameters in total, of which
+about 3B are active per token (a mixture-of-experts design), which keeps responses fast for its
+size. It can produce a "reasoning" trace before answering; this project switches that off (see below).
+Any OpenAI-compatible VLM can be used with `--model` and `--url`, including a self-hosted NIM
+container, in which case frames never leave your network.
+
+### How the project uses the VLM
+
+**1. When it is called (gating).** Never per frame — only when:
+
+| Trigger | Prompt sent with the frame |
+|---|---|
+| An alert event passes its cooldown | `A person (track #4) triggered a 'loiter' event in the 'door' area. In one short sentence, describe what this person is doing.` |
+| `--ask` timer (every `--ask-every` s) | `<your question> Answer only yes or no.` |
+| Dashboard Ask box | `<your question>` + `Answer based only on what is visible in this image. Be concise.` |
+| `--summary-every` timer | `Describe what is happening in this scene in one or two sentences.` |
+
+The event prompt is **grounded** in YOLO's output: the object class, track ID, event type and zone
+tell the VLM what to look at, and the VLM adds the meaning (what the person is doing, carrying,
+wearing).
+
+**2. Preparing the image.** The exact frame that triggered the event is copied (so the description
+always matches the saved snapshot), downscaled so its longest side is at most 768 px, JPEG-encoded at
+quality 80 and sent inline as a base64 `data:` URL — typically 50–150 KB per request.
+
+**3. The request.** A standard chat-completions call with a text part and an `image_url` part:
+
+```json
+{
+  "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "messages": [{ "role": "user", "content": [
+      { "type": "text", "text": "A person (track #4) triggered a 'loiter' event ..." },
+      { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,/9j/4AAQ..." } }
+  ]}],
+  "chat_template_kwargs": { "enable_thinking": false },
+  "max_tokens": 160,
+  "temperature": 0.2
+}
+```
+
+- `enable_thinking: false` turns off the model's reasoning trace, so it answers directly in about a
+  second or two instead of spending its token budget "thinking" and getting cut off.
+- `temperature: 0.2` keeps answers factual and consistent rather than creative.
+- `max_tokens: 160` is plenty for one or two sentences and bounds latency and cost.
+
+**4. Interpreting the answer.**
+
+- *Event descriptions, summaries and Ask-box answers* are stored as text exactly as returned, together
+  with the request latency (`vlm_latency_s`).
+- *`--ask` answers* are parsed: quotes and markdown are stripped and the answer counts as "yes" only
+  if it starts with "yes"; anything else is "no". Alerts are **edge-triggered** — one fires only when
+  the answer flips from no to yes (and the cooldown allows it), so a scene that stays "yes" doesn't
+  flood your inbox.
+
+**5. Never blocking the video.** All VLM calls run on a background worker thread fed by a bounded
+queue (8 jobs). Detection and tracking keep running at full speed while a request is in flight. If
+the queue is full, an event alert is still sent immediately (marked "VLM busy - no description") and
+a dashboard question is simply retried a moment later. Network errors and timeouts (40 s) are
+recorded as the description text rather than crashing the agent.
+
+### Limitations
+
+- **One still frame per request.** The VLM sees a snapshot, not the video; motion and timing come only
+  from YOLO's events (e.g. "loiter" means YOLO measured 20 s without movement).
+- **It can be wrong.** Descriptions are helpful context, not ground truth. For zone events the alert
+  decision is made by YOLO; for `--ask` the decision is the VLM's, so phrase questions about clearly
+  visible things.
+- **Privacy.** With the hosted endpoint, frames are sent to NVIDIA's cloud. Use `--url` with a local
+  NIM to keep them on your own hardware.
+- **Cost scales with use.** Each alert, question, summary and `--ask` check is one request
+  (`--ask-every 10` ≈ 360 requests per hour). Cooldowns, zones and `--ask-when-objects` keep this down.
 
 ## Data
 
