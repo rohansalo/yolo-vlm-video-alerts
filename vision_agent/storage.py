@@ -80,6 +80,10 @@ class Store:
         )
         return sid
 
+    def update_progress(self, sid, frames, avg_fps):
+        """Live heartbeat so the dashboard can show frames processed and FPS while running."""
+        self._exec("UPDATE sessions SET frames=?, avg_fps=? WHERE id=?", (frames, avg_fps, sid))
+
     def end_session(self, sid, frames, avg_fps):
         self._exec("UPDATE sessions SET ended_at=?, frames=?, avg_fps=? WHERE id=?", (now(), frames, avg_fps, sid))
 

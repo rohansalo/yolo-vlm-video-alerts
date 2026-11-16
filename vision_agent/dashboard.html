@@ -169,6 +169,7 @@
     <div class="card kpi"><div class="l">Alerts</div><div class="v" id="k-alerts">–</div><div class="s" id="k-alerts-s"></div></div>
     <div class="card kpi"><div class="l">Objects tracked</div><div class="v" id="k-objects">–</div><div class="s">unique track IDs with events</div></div>
     <div class="card kpi"><div class="l">Avg VLM latency</div><div class="v" id="k-lat">–</div><div class="s">per alert description</div></div>
+    <div class="card kpi"><div class="l">Processing speed</div><div class="v" id="k-fps">–</div><div class="s" id="k-fps-s"></div></div>
     <div class="card kpi"><div class="l">Duration</div><div class="v" id="k-dur">–</div><div class="s" id="k-dur-s"></div></div>
   </section>
 
@@ -333,7 +334,11 @@ function render(d) {
   $("k-objects").textContent = k.objects;
   $("k-lat").textContent = k.vlm_latency != null ? k.vlm_latency.toFixed(1) + "s" : "–";
   $("k-dur").textContent = fmtDur(d.duration_s);
-  $("k-dur-s").textContent = s.frames ? `${s.frames} frames · ${s.avg_fps} fps` : (d.live ? "running" : "");
+  $("k-dur-s").textContent = d.live ? "running" : "ended";
+  $("k-fps").textContent = s.avg_fps != null ? `${Number(s.avg_fps).toFixed(1)} FPS` : "–";
+  $("k-fps-s").textContent = s.frames
+    ? `${Number(s.frames).toLocaleString()} frames analysed${d.live ? " so far" : ""}`
+    : (d.live ? "measuring…" : "");
 
   timeline($("timeline"), d.timeline);
   bars($("by-type"), d.by_type, "events");

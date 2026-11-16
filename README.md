@@ -24,10 +24,11 @@ every frame. See [How it works](#how-it-works-yolo--vision-language-models) for 
 All screenshots are from real runs on a public YouTube live cam (Fiserv Forum, Milwaukee) with the
 `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` VLM.
 
-**Live dashboard:** the Ask box, KPIs, event timeline, breakdowns by type/class/zone, the latest
-VLM scene summary, and alerts with their snapshot and the VLM's description.
+**Dashboard:** the Ask box, KPIs (including processing speed), event timeline, breakdowns by
+type/class/zone, the latest VLM scene summary, and alerts with their snapshot and the VLM's
+description. This is a finished ~6-minute session; while a session runs, the page refreshes live.
 
-![Live dashboard session: Ask box with three answered questions, 11 events, 3 alerts, 1.7 s average VLM latency, an events-per-10s timeline, a twilight scene summary of the Fiserv Forum, and alert cards such as "A white car is driving down the street."](docs/images/dashboard.png)
+![Dashboard for a finished 6-minute session: three answered questions, 17 events, 4 alerts, 1.8 s average VLM latency, 8.3 FPS over 2,939 frames, an events-per-10s timeline, a twilight scene summary of the Fiserv Forum, and alert cards such as "The car is driving down the street, and there is a person standing on the sidewalk next to it."](docs/images/dashboard.png)
 
 **Ask about the live scene:** natural-language questions answered by the VLM about the current
 frame in under 2 seconds, with the exact frame it looked at. Answers are not always right: here
@@ -100,7 +101,8 @@ reader always hands over the newest frame (lowest latency). YouTube/Twitch/HLS s
 multi-second segments in bursts, so the reader paces them out at the stream's own frame rate, like a
 video player, a few seconds behind live. Without this, the agent would only ever see the last frame
 of each burst (about 1 FPS); with it, a 720p YouTube live stream is processed at ~18 FPS on a laptop
-CPU (headless).
+CPU when headless (`--no-display`), and ~8 FPS in a 6-minute run with the preview window, dashboard
+and browser open on the same machine. The dashboard's *Processing speed* tile shows the live figure.
 
 ### Zones
 
@@ -191,7 +193,7 @@ That flexibility has costs, which is why this project does not use a VLM alone:
 | | YOLO (local detector) | VLM (NVIDIA NIM) |
 |---|---|---|
 | Output | boxes + 80 fixed classes, track IDs | free-form text |
-| Speed | real-time on a laptop CPU (~18 FPS tracking a 720p live stream, ~50 ms per frame) | ~1–5 s per request over the network |
+| Speed | real-time on a laptop CPU (8–18 FPS tracking a 720p live stream, ~50 ms per frame headless) | ~1–5 s per request over the network |
 | Cost | free after download | one API request per image |
 | Understands | *what* and *where* | *what is happening* and *why it matters* |
 | Typical failure | missed or flickering boxes | confident but wrong descriptions (hallucination) |

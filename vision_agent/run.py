@@ -213,7 +213,7 @@ def main():
     worker = VLMWorker(VLMClient(args.api_key, model=args.model, url=args.url), on_vlm_result)
 
     last_id, frames, t_start, last_summary = -1, 0, time.time(), time.time()
-    last_poll, last_watch = 0.0, 0.0
+    last_poll, last_watch, last_progress = 0.0, 0.0, time.time()
     watch_prompt = None
     if args.ask:
         watch_prompt = args.ask if "yes or no" in args.ask.lower() else f"{args.ask} Answer only yes or no."
@@ -277,6 +277,9 @@ def main():
             fps_n += 1
             if t - fps_t >= 1.0:
                 fps, fps_t, fps_n = fps_n / (t - fps_t), t, 0
+            if t - last_progress >= 5.0:  # live frames/FPS for the dashboard
+                last_progress = t
+                store.update_progress(sid, frames, round(frames / max(t - t_start, 1e-6), 2))
 
             if not args.no_display:
                 ui["alert_zones"] = {z: u for z, u in ui["alert_zones"].items() if u > t}
