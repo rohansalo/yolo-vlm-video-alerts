@@ -1,0 +1,9 @@
+.ipynb_checkpoints
+.env
+__pycache__
+venv
+*.mp4
+*.db
+*.pt
+snapshots/
+zones.json

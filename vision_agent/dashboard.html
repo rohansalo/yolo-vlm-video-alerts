@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vision Agent Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f3f0;
+    --surface-1: #fcfcfb;
+    --border: #e2e0da;
+    --grid: #ecebe7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #77756f;
+    --series-1: #2a78d6;
+    --critical: #d03b3b;
+    --critical-bg: #fbeaea;
+    --good: #0ca30c;
+    --tooltip-bg: #1a1a19;
+    --tooltip-fg: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #111110;
+      --surface-1: #1a1a19;
+      --border: #2e2e2c;
+      --grid: #262624;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e86;
+      --series-1: #3987e5;
+      --critical: #e66767;
+      --critical-bg: #3a1f1f;
+      --tooltip-bg: #f0efec;
+      --tooltip-fg: #1a1a19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #111110; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --series-1: #3987e5; --critical: #e66767; --critical-bg: #3a1f1f;
+    --tooltip-bg: #f0efec; --tooltip-fg: #1a1a19;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; }
+  .grow { flex: 1; }
+  select {
+    font: inherit; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; max-width: 100%;
+  }
+  .badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); }
+  .badge.live { color: var(--good); border-color: var(--good); }
+  .badge.live::before { content: "\25CF  "; }
+  .meta { color: var(--text-secondary); font-size: 13px; margin: -8px 0 16px; overflow-wrap: anywhere; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+  .card h2 { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 0 0 12px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .kpi .v { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-secondary); font-size: 13px; }
+  .kpi .s { color: var(--text-muted); font-size: 12px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(12, minmax(0, 1fr)); margin-bottom: 12px; }
+  .c4 { grid-column: span 4; } .c6 { grid-column: span 6; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
+  @media (max-width: 900px) { .c4, .c6, .c8 { grid-column: span 12; } }
+
+  /* column chart: events per minute */
+  .cols { display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--text-muted);
+          background-image: linear-gradient(var(--grid) 1px, transparent 1px); background-size: 100% 40px; background-position: 0 -1px; }
+  .col { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+  .col i { display: block; width: 100%; background: var(--series-1); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .col:hover i { filter: brightness(1.15); }
+  .axis { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  /* horizontal bar lists */
+  .bars { display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: minmax(70px, 34%) 1fr; gap: 10px; align-items: center; }
+  .bar .name { color: var(--text-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .track { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .bar .fill { height: 14px; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .bar .num { font-size: 12px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+
+  /* alerts feed */
+  .feed { display: grid; gap: 10px; max-height: 520px; overflow: auto; }
+  .alert { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 10px; border-radius: 10px;
+           background: var(--critical-bg); border-left: 3px solid var(--critical); }
+  .alert img { width: 120px; height: 80px; object-fit: cover; border-radius: 6px; cursor: zoom-in; background: var(--grid); }
+  .alert .noimg { width: 120px; height: 80px; border-radius: 6px; background: var(--grid); }
+  .alert .top { font-size: 12px; color: var(--text-secondary); }
+  .alert .top b { color: var(--critical); }
+  .alert .what { font-weight: 600; margin: 2px 0; }
+  .alert .desc { font-size: 13px; color: var(--text-primary); }
+  @media (max-width: 520px) { .alert { grid-template-columns: 1fr; } .alert img, .alert .noimg { width: 100%; height: 160px; } }
+
+  .summary { font-size: 14px; }
+  .summary .t { color: var(--text-muted); font-size: 12px; }
+
+  /* table */
+  .tablewrap { overflow-x: auto; max-height: 460px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; z-index: 1; }
+  td.n { font-variant-numeric: tabular-nums; text-align: right; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; color: var(--critical); }
+  .tag::before { content: "\26A0  "; }
+
+  #tip { position: fixed; pointer-events: none; background: var(--tooltip-bg); color: var(--tooltip-fg);
+         font-size: 12px; padding: 6px 9px; border-radius: 6px; display: none; z-index: 10; white-space: nowrap; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; cursor: zoom-out; }
+  #modal img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+  .err { color: var(--critical); font-size: 13px; }
+
+  /* ask box */
+  .askform { display: flex; gap: 8px; flex-wrap: wrap; }
+  .askform input { flex: 1 1 260px; min-width: 0; font: inherit; color: var(--text-primary); background: var(--page);
+                   border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+  .askform button { font: inherit; font-weight: 600; color: #fff; background: var(--series-1); border: 0;
+                    border-radius: 8px; padding: 9px 18px; cursor: pointer; }
+  .askform button:disabled, .askform input:disabled { opacity: .5; cursor: not-allowed; }
+  .watch { margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+  .watch b.yes { color: var(--critical); }
+  .qa { display: grid; gap: 10px; margin-top: 12px; max-height: 360px; overflow: auto; }
+  .qa .item { display: grid; grid-template-columns: 1fr 96px; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--page); }
+  .qa .q { font-weight: 600; }
+  .qa .a { margin-top: 2px; }
+  .qa .t { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .qa img { width: 96px; height: 64px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
+  .qa .wait { color: var(--text-muted); font-style: italic; }
+  .qa .bad { color: var(--critical); }
+  @media (max-width: 520px) { .qa .item { grid-template-columns: 1fr; } .qa img { width: 100%; height: 140px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Vision Agent</h1>
+    <span id="live" class="badge">—</span>
+    <span class="grow"></span>
+    <label for="sess" style="color:var(--text-secondary);font-size:13px">Session</label>
+    <select id="sess"></select>
+  </header>
+  <div class="meta" id="meta"></div>
+  <div id="err" class="err"></div>
+
+  <section class="grid">
+    <div class="card c12">
+      <h2>Ask about the live scene</h2>
+      <form class="askform" id="askform" autocomplete="off">
+        <input id="askq" maxlength="500" placeholder="e.g. How many people are wearing red? Is the door open?" aria-label="Question">
+        <button id="askbtn" type="submit">Ask</button>
+      </form>
+      <div id="askerr" class="err" style="margin-top:6px"></div>
+      <div id="watch" class="watch"></div>
+      <div id="qa" class="qa"></div>
+    </div>
+  </section>
+
+  <section class="kpis">
+    <div class="card kpi"><div class="l">Events</div><div class="v" id="k-events">–</div><div class="s" id="k-events-s"></div></div>
+    <div class="card kpi"><div class="l">Alerts</div><div class="v" id="k-alerts">–</div><div class="s" id="k-alerts-s"></div></div>
+    <div class="card kpi"><div class="l">Objects tracked</div><div class="v" id="k-objects">–</div><div class="s">unique track IDs with events</div></div>
+    <div class="card kpi"><div class="l">Avg VLM latency</div><div class="v" id="k-lat">–</div><div class="s">per alert description</div></div>
+    <div class="card kpi"><div class="l">Duration</div><div class="v" id="k-dur">–</div><div class="s" id="k-dur-s"></div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card c8">
+      <h2 id="tl-title">Events over time</h2>
+      <div id="timeline"></div>
+    </div>
+    <div class="card c4">
+      <h2>Latest scene summary</h2>
+      <div id="summary" class="summary"></div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card c4"><h2>Events by type</h2><div id="by-type" class="bars"></div></div>
+    <div class="card c4"><h2>Objects by class</h2><div id="by-class" class="bars"></div></div>
+    <div class="card c4"><h2>Events by zone</h2><div id="by-zone" class="bars"></div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card c12">
+      <h2>Recent alerts</h2>
+      <div id="feed" class="feed"></div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card c12">
+      <h2>All events (latest 200)</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Time</th><th>Type</th><th>Zone</th><th>Object</th><th class="n">Conf</th><th class="n">Speed</th><th>Alert</th><th>Description</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="tip"></div>
+<div id="modal"><img alt="Alert snapshot"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nice = (t) => String(t || "").replace(/_/g, " ");
+const fmtDur = (s) => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+const snapUrl = (p) => p ? "snapshot/" + encodeURIComponent(p.split(/[\\/]/).pop()) : null;
+
+let current = null, followLatest = true, lastSessionsKey = "";
+
+// tooltip
+const tip = $("tip");
+document.addEventListener("mousemove", (e) => {
+  const t = e.target.closest("[data-tip]");
+  if (!t) { tip.style.display = "none"; return; }
+  tip.innerHTML = t.dataset.tip;
+  tip.style.display = "block";
+  const x = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
+  tip.style.left = x + "px"; tip.style.top = (e.clientY + 14) + "px";
+});
+
+// snapshot zoom
+const modal = $("modal");
+document.addEventListener("click", (e) => {
+  if (e.target.matches(".alert img, .qa img")) { modal.querySelector("img").src = e.target.src; modal.style.display = "flex"; }
+  else if (e.target.closest("#modal")) modal.style.display = "none";
+});
+
+$("sess").addEventListener("change", (e) => {
+  current = e.target.value;
+  followLatest = e.target.selectedIndex === 0;
+  refresh();
+});
+
+function bars(el, items, unit) {
+  if (!items.length) { el.innerHTML = '<div class="empty">No data yet</div>'; return; }
+  const max = Math.max(...items.map((d) => d.n));
+  el.innerHTML = items.map((d) => {
+    const w = Math.max(1, (d.n / max) * 100);
+    const label = esc(nice(d.label));
+    return `<div class="bar" data-tip="${label}: <b>${d.n}</b> ${unit}">
+      <span class="name">${label}</span>
+      <span class="track"><span class="fill" style="width:calc(${w}% - 40px)"></span><span class="num">${d.n}</span></span>
+    </div>`;
+  }).join("");
+}
+
+function timeline(el, tl) {
+  const rows = tl.rows, unit = tl.bucket_s >= 60 ? `${tl.bucket_s / 60} min` : `${tl.bucket_s}s`;
+  $("tl-title").textContent = `Events per ${unit}`;
+  if (!rows.some((r) => r.n)) { el.innerHTML = '<div class="empty">No events yet</div>'; return; }
+  const max = Math.max(...rows.map((r) => r.n));
+  el.innerHTML = `<div class="cols">${rows.map((r) =>
+    `<div class="col" data-tip="${esc(r.label)} &middot; <b>${r.n}</b> events, ${r.alerts} alerts"><i style="height:${r.n ? (r.n / max) * 100 : 0}%;${r.n ? "" : "min-height:0"}"></i></div>`
+  ).join("")}</div>
+  <div class="axis"><span>${esc(rows[0].label)}</span><span>peak ${max} per ${unit}</span><span>${esc(rows[rows.length - 1].label)}</span></div>`;
+}
+
+$("askform").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = $("askq").value.trim();
+  if (!question || !current) return;
+  $("askbtn").disabled = true;
+  $("askerr").textContent = "";
+  try {
+    const r = await fetch(`api/session/${encodeURIComponent(current)}/ask`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    $("askq").value = "";
+    refresh();
+  } catch (err) {
+    $("askerr").textContent = err.message;
+  } finally {
+    $("askbtn").disabled = !isLive;
+  }
+});
+
+let isLive = false;
+function renderAsk(d) {
+  isLive = d.live;
+  $("askq").disabled = $("askbtn").disabled = !d.live;
+  $("askq").placeholder = d.live
+    ? "e.g. How many people are wearing red? Is the door open?"
+    : "Session ended. Start the agent to ask about the live scene.";
+  const w = d.watch;
+  $("watch").innerHTML = w
+    ? `Watching: “${esc(w.question)}” · latest answer <b class="${/^\W*yes/i.test(w.answer || "") ? "yes" : ""}">${esc(w.answer)}</b> at ${esc((w.answered_at || "").slice(11))}`
+    : "";
+  const now = Date.now();
+  $("qa").innerHTML = d.questions.map((q) => {
+    const askedMs = new Date(q.asked_at.replace(" ", "T")).getTime();
+    let ans;
+    if (q.status === "done") ans = `<div class="a">${esc(q.answer)}</div>`;
+    else if (q.status === "error") ans = `<div class="a bad">${esc(q.answer)}</div>`;
+    else if (now - askedMs > 30000) ans = `<div class="a wait">Still waiting… is the agent still running?</div>`;
+    else ans = `<div class="a wait">${q.status === "answering" ? "Looking at the scene…" : "Sent to the agent…"}</div>`;
+    const src = snapUrl(q.snapshot_path);
+    return `<div class="item"><div>
+        <div class="q">${esc(q.question)}</div>${ans}
+        <div class="t">${esc(q.asked_at.slice(11))}${q.vlm_latency_s != null ? ` · answered in ${q.vlm_latency_s}s` : ""}</div>
+      </div>${src ? `<img src="${src}" alt="Frame the question was asked about">` : "<span></span>"}</div>`;
+  }).join("");
+}
+
+function render(d) {
+  renderAsk(d);
+  const s = d.session, k = d.kpi;
+  $("live").textContent = d.live ? "Live" : "Ended";
+  $("live").className = "badge" + (d.live ? " live" : "");
+  $("meta").textContent = `Source: ${s.source}  ·  Model: ${s.model}  ·  Started ${s.started_at}` + (s.ended_at ? `  ·  Ended ${s.ended_at}` : "");
+  $("k-events").textContent = k.events;
+  $("k-events-s").textContent = d.duration_s ? `${(k.events / Math.max(d.duration_s / 60, 1 / 60)).toFixed(1)} per min` : "";
+  $("k-alerts").textContent = k.alerts;
+  $("k-alerts-s").textContent = k.events ? `${Math.round((k.alerts / k.events) * 100)}% of events` : "";
+  $("k-objects").textContent = k.objects;
+  $("k-lat").textContent = k.vlm_latency != null ? k.vlm_latency.toFixed(1) + "s" : "–";
+  $("k-dur").textContent = fmtDur(d.duration_s);
+  $("k-dur-s").textContent = s.frames ? `${s.frames} frames · ${s.avg_fps} fps` : (d.live ? "running" : "");
+
+  timeline($("timeline"), d.timeline);
+  bars($("by-type"), d.by_type, "events");
+  bars($("by-class"), d.by_class, "objects");
+  bars($("by-zone"), d.by_zone, "events");
+
+  const sm = d.summaries[0];
+  $("summary").innerHTML = sm
+    ? `<div>${esc(sm.description)}</div><div class="t">${esc(sm.ts)} · counts ${esc(sm.object_counts)}</div>`
+    : '<div class="empty">No summaries. Start the agent with <code>--summary-every 30</code> to get one every 30s.</div>';
+
+  const alerts = d.events.filter((e) => e.is_alert);
+  $("feed").innerHTML = alerts.length ? alerts.slice(0, 30).map((e) => {
+    const src = snapUrl(e.snapshot_path);
+    return `<div class="alert">
+      ${src ? `<img loading="lazy" src="${src}" alt="Snapshot of ${esc(e.object_class)} #${e.track_id}">` : '<div class="noimg"></div>'}
+      <div>
+        <div class="top"><b>&#9888; ALERT</b> · ${esc(e.ts)}${e.vlm_latency_s != null ? ` · VLM ${e.vlm_latency_s}s` : ""}</div>
+        <div class="what">${esc(nice(e.type))} · ${esc(e.object_class)} #${e.track_id} in ${esc(nice(e.zone))}</div>
+        <div class="desc">${e.description ? esc(e.description) : '<span style="color:var(--text-muted)">Waiting for VLM description…</span>'}</div>
+      </div>
+    </div>`;
+  }).join("") : '<div class="empty">No alerts in this session.</div>';
+
+  $("rows").innerHTML = d.events.map((e) => `<tr>
+    <td>${esc(e.ts.slice(11))}</td><td>${esc(nice(e.type))}</td><td>${esc(nice(e.zone))}</td>
+    <td>${esc(e.object_class)} #${e.track_id}</td><td class="n">${(e.confidence ?? 0).toFixed(2)}</td>
+    <td class="n">${(e.speed ?? 0).toFixed(2)}</td><td>${e.is_alert ? '<span class="tag">Alert</span>' : ""}</td>
+    <td>${esc(e.description || "")}</td></tr>`).join("") || '<tr><td colspan="8" class="empty">No events yet</td></tr>';
+}
+
+async function refresh() {
+  try {
+    const sessions = await (await fetch("api/sessions")).json();
+    const key = sessions.map((s) => s.id + s.events + s.ended_at).join("|");
+    if (key !== lastSessionsKey) {
+      lastSessionsKey = key;
+      if (followLatest && sessions.length) current = sessions[0].id;
+      $("sess").innerHTML = sessions.map((s) =>
+        `<option value="${esc(s.id)}" ${s.id === current ? "selected" : ""}>${esc(s.started_at)} · ${s.events} events${s.ended_at ? "" : " (live)"}</option>`
+      ).join("");
+    }
+    if (!sessions.length) {
+      $("err").textContent = "";
+      $("meta").textContent = "No sessions yet. Start the agent: python -m vision_agent.run --source 0";
+      return;
+    }
+    const r = await fetch("api/session/" + encodeURIComponent(current));
+    if (!r.ok) throw new Error("session " + r.status);
+    render(await r.json());
+    $("err").textContent = "";
+  } catch (e) {
+    $("err").textContent = "Can't reach the dashboard server (" + e.message + "). Is it still running?";
+  }
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
