@@ -1,4 +1,4 @@
-# Realtime Vision Alerts — YOLO tracking + NVIDIA VLM descriptions
+# YOLO-VLM Video Alerts — real-time detection + NVIDIA vision-language descriptions
 
 Watch a webcam, IP camera, video file or YouTube live stream. A local YOLO model detects and tracks
 people and vehicles, zone/motion rules turn that into events, and an NVIDIA vision-language model
