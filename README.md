@@ -19,6 +19,26 @@ YOLO decides **whether** something happened; the VLM only explains **what** happ
 it fast, cheap on API credits, and far less prone to hallucinated alerts than asking a VLM about
 every frame. See [How it works](#how-it-works-yolo--vision-language-models) for the technical details.
 
+## Screenshots
+
+All screenshots are from real runs on a public YouTube live cam (Fiserv Forum, Milwaukee) with the
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` VLM.
+
+**Live dashboard:** KPIs, event timeline, breakdowns by type/class/zone, and alerts with their
+snapshot and the VLM's description.
+
+![Dashboard showing 44 events, 9 alerts, an events-per-10s timeline, a VLM scene summary and alert cards with snapshots](docs/images/dashboard.png)
+
+**Ask about the live scene:** natural-language questions answered by the VLM about the current
+frame, with the exact frame it looked at and the response time.
+
+![Ask box with questions such as "list out all of the building names you can see" answered "fiserv forum" in under 2.2 seconds](docs/images/ask.png)
+
+**What the CV model sees:** YOLO11n detections and a drawn zone, rendered with the agent's own
+overlay on a frame from the same stream.
+
+![Street scene with bounding boxes around cars and a bus and a green polygon zone labelled street](docs/images/detection.jpg)
+
 ## Setup
 
 ```powershell
@@ -52,7 +72,8 @@ python -m vision_agent.run --source 0 --draw-zones
 python -m vision_agent.dashboard
 ```
 
-Press `q` in the video window (or Ctrl+C) to stop the agent.
+Press `q` in the video window (or Ctrl+C) to stop the agent. The dashboard follows the newest
+session; pick an older one from the Session menu or open `http://localhost:8050/?session=<id>`.
 
 ### Sources
 
