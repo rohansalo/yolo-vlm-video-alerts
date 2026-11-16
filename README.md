@@ -1,4 +1,4 @@
-# Vision Agent — real-time video alerts with YOLO + NVIDIA VLMs
+# Realtime Vision Alerts — YOLO tracking + NVIDIA VLM descriptions
 
 Watch a webcam, IP camera, video file or YouTube live stream. A local YOLO model detects and tracks
 people and vehicles, zone/motion rules turn that into events, and an NVIDIA vision-language model
@@ -22,8 +22,8 @@ every frame.
 ## Setup
 
 ```powershell
-git clone https://github.com/YOUR-USERNAME/vision-agent.git
-cd vision-agent
+git clone https://github.com/YOUR-USERNAME/realtime-vision-alerts.git
+cd realtime-vision-alerts
 python -m venv venv
 .\venv\Scripts\Activate.ps1          # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
