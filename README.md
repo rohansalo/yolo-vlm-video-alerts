@@ -24,15 +24,22 @@ every frame. See [How it works](#how-it-works-yolo--vision-language-models) for 
 All screenshots are from real runs on a public YouTube live cam (Fiserv Forum, Milwaukee) with the
 `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` VLM.
 
-**Live dashboard:** KPIs, event timeline, breakdowns by type/class/zone, and alerts with their
-snapshot and the VLM's description.
+**Live dashboard:** the Ask box, KPIs, event timeline, breakdowns by type/class/zone, the latest
+VLM scene summary, and alerts with their snapshot and the VLM's description.
 
-![Dashboard showing 44 events, 9 alerts, an events-per-10s timeline, a VLM scene summary and alert cards with snapshots](docs/images/dashboard.png)
+![Live dashboard session: Ask box with three answered questions, 11 events, 3 alerts, 1.7 s average VLM latency, an events-per-10s timeline, a twilight scene summary of the Fiserv Forum, and alert cards such as "A white car is driving down the street."](docs/images/dashboard.png)
 
 **Ask about the live scene:** natural-language questions answered by the VLM about the current
-frame, with the exact frame it looked at and the response time.
+frame in under 2 seconds, with the exact frame it looked at. Answers are not always right: here
+it reads the "Fiserv Forum" sign as "Tisery forum" (see [Limitations](#limitations)).
 
-![Ask box with questions such as "list out all of the building names you can see" answered "fiserv forum" in under 2.2 seconds](docs/images/ask.png)
+![Ask box: "how many people are walking around" answered "2", "does anybody moving cardboard boxes" answered "No", and the shop-name question answered "Tisery forum"](docs/images/ask.png)
+
+**Visual prompting:** for each alert the CV model's box is drawn on the frame in red before it is
+sent to the VLM, so the description is about the right object. For this frame the VLM returned
+*"The car is driving down the street, and there is a person standing on the sidewalk next to it."*
+
+![Twilight street scene in front of the Fiserv Forum with one car outlined by a red box](docs/images/visual-prompt.jpg)
 
 **What the CV model sees:** YOLO11n detections and a drawn zone, rendered with the agent's own
 overlay on a frame from the same stream.
