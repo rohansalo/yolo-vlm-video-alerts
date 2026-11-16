@@ -63,6 +63,42 @@ def parse_args():
     return p.parse_args()
 
 
+SITUATION = {
+    "zone_enter": "It has just entered the area being watched.",
+    "zone_exit": "It has just left the area being watched.",
+    "moving_in_zone": "It is moving.",
+    "loiter": "It has stayed in roughly the same place for about {dwell} seconds.",
+}
+
+
+def mark_object(frame, box):
+    """Copy of the frame with a red outline around the object (visual prompt for the VLM)."""
+    marked = frame.copy()
+    h, w = marked.shape[:2]
+    pad = max(4, w // 200)
+    x1, y1, x2, y2 = (int(v) for v in box)
+    cv2.rectangle(marked, (max(0, x1 - pad), max(0, y1 - pad)), (min(w - 1, x2 + pad), min(h - 1, y2 + pad)),
+                  (0, 0, 255), max(2, w // 400))
+    return marked
+
+
+def event_prompt(ev, w, h):
+    """Grounded prompt: plain facts from the CV model (class, position, behaviour), no internal jargon."""
+    x1, y1, x2, y2 = ev["box"]
+    cx, cy = (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
+    horiz = "left" if cx < 1 / 3 else "right" if cx > 2 / 3 else "centre"
+    vert = "top" if cy < 1 / 3 else "bottom" if cy > 2 / 3 else "middle"
+    where = "centre" if (horiz, vert) == ("centre", "middle") else f"{vert} {horiz}".replace("middle ", "")
+    situation = SITUATION[ev["type"]].format(dwell=int(ev.get("dwell_s", 20)))
+    obj = ev["object_class"]
+    return (
+        f"The {obj} outlined in red, in the {where} of the image, is being monitored. {situation} "
+        f"In one short sentence, describe what this {obj} is doing and anything notable about it, such as its "
+        "appearance or what it is carrying or next to. Describe only what you can see. "
+        "Do not mention the red outline."
+    )
+
+
 def draw(frame, zones, tracks, alert_zones, status, banner):
     h, w = frame.shape[:2]
     for z in zones:
@@ -200,23 +236,21 @@ def main():
             events = engine.update(detector.track(frame), w, h, t)
             for ev in events:
                 is_alert = ev["type"] in alert_on and notifier.should_alert(ev)
-                snap = None
+                snap = marked = None
                 if is_alert:
+                    # visual prompt: outline the object so the VLM (and the snapshot viewer) know which one
+                    marked = mark_object(frame, ev["box"])
                     snap = os.path.join(args.snapshots, f"{sid}_{ev['type']}_{ev['zone']}_{ev['track_id']}_{fid}.jpg")
-                    cv2.imwrite(snap, frame)
+                    cv2.imwrite(snap, marked)
                 event_id = store.add_event(sid, ev, is_alert, snap)
                 payload = {k: v for k, v in ev.items() if k != "t"}
                 payload.update(ts=now(), event_id=event_id, session_id=sid, snapshot=snap)
                 notifier.broadcast({"kind": "event", **payload})
                 if is_alert:
                     ui["alert_zones"][ev["zone"]] = t + 5
-                    prompt = (
-                        f"A {ev['object_class']} (track #{ev['track_id']}) triggered a '{ev['type']}' event in the "
-                        f"'{ev['zone']}' area. In one short sentence, describe what this {ev['object_class']} is doing."
-                    )
                     job = dict(kind="event", event_id=event_id, payload=payload)
-                    if not worker.submit(frame.copy(), prompt, **job):
-                        notifier.alert(dict(payload, description="(VLM busy - no description)"), frame)
+                    if not worker.submit(marked, event_prompt(ev, w, h), **job):
+                        notifier.alert(dict(payload, description="(VLM busy - no description)"), marked)
 
             # questions typed on the dashboard (answered about the current frame)
             if t - last_poll >= 0.5:

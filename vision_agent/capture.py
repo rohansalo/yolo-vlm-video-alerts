@@ -78,6 +78,11 @@ class VideoSource:
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimise internal buffering latency
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         self.fps = fps if fps and 1 < fps < 120 else 30.0
+        # Pace frames at the video's own fps for files and segment-based streams (YouTube/Twitch/HLS).
+        # HLS delivers a few seconds of video in one burst; unpaced, the reader would race through
+        # each burst and the agent would only ever see its last frame (~1 fps). Webcams and RTSP
+        # push frames in real time, so they stay unpaced (always the newest frame, minimal lag).
+        self.paced = (not self.is_live) or bool(self.page_url) or ".m3u8" in str(self.source).lower()
 
         self._frame = None
         self._frame_id = 0
@@ -100,10 +105,10 @@ class VideoSource:
         self.cap = cv2.VideoCapture(self.source)
 
     def _reader(self):
-        frame_period = 0.0 if self.is_live else 1.0 / self.fps
+        frame_period = 1.0 / self.fps if self.paced else 0.0
         failures = 0
+        next_due = time.time()
         while self.running:
-            started = time.time()
             ok, frame = self.cap.read()
             if not ok:
                 if self.loop:
@@ -123,7 +128,15 @@ class VideoSource:
                 self._frame = frame
                 self._frame_id += 1
             if frame_period:
-                time.sleep(max(0.0, frame_period - (time.time() - started)))
+                next_due += frame_period
+                delay = next_due - time.time()
+                if delay > 0:
+                    time.sleep(delay)
+                elif delay < -2.0:
+                    # stalled >2 s (slow network/decoder): resume normal speed from here rather than
+                    # sprinting through the backlog, which would skip frames again
+                    next_due = time.time()
+                # else: slightly behind (e.g. a segment download) - read without sleeping to catch up
 
     def read(self):
         """Return (frame_id, frame copy) of the newest frame, or (id, None) if none yet."""

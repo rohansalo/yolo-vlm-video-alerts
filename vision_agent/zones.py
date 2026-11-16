@@ -58,7 +58,8 @@ def draw_zones_interactive(frame, path):
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win, min(w, 1280), min(h, 720))
     cv2.setMouseCallback(win, on_mouse)
-    print("\n[zones] Click points around the area to watch. Press 'n' to finish a zone, 's' to save.")
+    print("\n[zones] Click points around the area to watch. Press 'n' to finish a zone (then type its name "
+          "here in the terminal), 's' to save.")
 
     while True:
         canvas = frame.copy()
@@ -74,7 +75,20 @@ def draw_zones_interactive(frame, path):
         cv2.imshow(win, canvas)
         key = cv2.waitKey(30) & 0xFF
         if key == ord("n") and len(current) >= 3:
-            name = input(f"[zones] Name for zone {len(zones) + 1} (e.g. back_road): ").strip() or f"zone{len(zones) + 1}"
+            # input() blocks this window, so say on the window itself where to type
+            hint = canvas.copy()
+            cv2.rectangle(hint, (0, h // 2 - 40), (w, h // 2 + 40), (0, 0, 0), -1)
+            cv2.putText(hint, "Type the zone name in the TERMINAL, then press Enter", (20, h // 2 + 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, max(0.6, w / 1600), (0, 220, 255), 2)
+            cv2.imshow(win, hint)
+            cv2.waitKey(1)
+            name = None
+            while name is None:
+                name = input(f"[zones] Name for zone {len(zones) + 1} (e.g. street, door): ").strip()
+                if len(name) == 1 and name.lower() in "nsucq":
+                    print("[zones] That looks like a key press - type a descriptive name, e.g. street")
+                    name = None
+            name = name or f"zone{len(zones) + 1}"
             zones.append(Zone(name.replace(" ", "_"), current.copy()))
             current.clear()
         elif key == ord("u") and current:

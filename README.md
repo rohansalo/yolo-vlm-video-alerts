@@ -88,6 +88,13 @@ session; pick an older one from the Session menu or open `http://localhost:8050/
 Web video links are resolved with `yt-dlp`; expired stream URLs are refreshed automatically on reconnect.
 Use `--max-height 480` to reduce bandwidth.
 
+How frames are read depends on the source. Webcams and RTSP cameras push frames in real time, so the
+reader always hands over the newest frame (lowest latency). YouTube/Twitch/HLS streams arrive as
+multi-second segments in bursts, so the reader paces them out at the stream's own frame rate, like a
+video player, a few seconds behind live. Without this, the agent would only ever see the last frame
+of each burst (about 1 FPS); with it, a 720p YouTube live stream is processed at ~18 FPS on a laptop
+CPU (headless).
+
 ### Zones
 
 `--draw-zones` opens the first frame: click points around an area, press `n` and type a name **in the
@@ -177,7 +184,7 @@ That flexibility has costs, which is why this project does not use a VLM alone:
 | | YOLO (local detector) | VLM (NVIDIA NIM) |
 |---|---|---|
 | Output | boxes + 80 fixed classes, track IDs | free-form text |
-| Speed | real-time on a laptop CPU (~10+ fps) | ~1–5 s per request over the network |
+| Speed | real-time on a laptop CPU (~18 FPS tracking a 720p live stream, ~50 ms per frame) | ~1–5 s per request over the network |
 | Cost | free after download | one API request per image |
 | Understands | *what* and *where* | *what is happening* and *why it matters* |
 | Typical failure | missed or flickering boxes | confident but wrong descriptions (hallucination) |
@@ -200,18 +207,24 @@ container, in which case frames never leave your network.
 
 | Trigger | Prompt sent with the frame |
 |---|---|
-| An alert event passes its cooldown | `A person (track #4) triggered a 'loiter' event in the 'door' area. In one short sentence, describe what this person is doing.` |
+| An alert event passes its cooldown | `The car outlined in red, in the bottom left of the image, is being monitored. It has stayed in roughly the same place for about 23 seconds. In one short sentence, describe what this car is doing and anything notable about it, such as its appearance or what it is carrying or next to. Describe only what you can see. Do not mention the red outline.` |
 | `--ask` timer (every `--ask-every` s) | `<your question> Answer only yes or no.` |
 | Dashboard Ask box | `<your question>` + `Answer based only on what is visible in this image. Be concise.` |
 | `--summary-every` timer | `Describe what is happening in this scene in one or two sentences.` |
 
-The event prompt is **grounded** in YOLO's output: the object class, track ID, event type and zone
-tell the VLM what to look at, and the VLM adds the meaning (what the person is doing, carrying,
-wearing).
+The event prompt is **grounded** in the CV model's output in two ways:
 
-**2. Preparing the image.** The exact frame that triggered the event is copied (so the description
-always matches the saved snapshot), downscaled so its longest side is at most 768 px, JPEG-encoded at
-quality 80 and sent inline as a base64 `data:` URL — typically 50–150 KB per request.
+- **Visual prompting.** The agent draws a red box around the detected object on the frame it sends,
+  so in a busy scene the VLM knows exactly *which* car or person to describe.
+- **Plain-language facts.** The text names the object class, where it is in the image (e.g. "bottom
+  left") and what YOLO measured ("it has stayed in roughly the same place for about 23 seconds"),
+  rather than internal names like `loiter` or zone IDs that a model would just repeat back. The VLM
+  adds what only it can see: what the object is doing, what it looks like, what it is carrying or near.
+
+**2. Preparing the image.** The exact frame that triggered the event is copied with the object
+outlined, saved as the alert snapshot (so the description always matches the picture in the
+dashboard and email), downscaled so its longest side is at most 768 px, JPEG-encoded at quality 80 and
+sent inline as a base64 `data:` URL — typically 50–150 KB per request.
 
 **3. The request.** A standard chat-completions call with a text part and an `image_url` part:
 
@@ -219,7 +232,7 @@ quality 80 and sent inline as a base64 `data:` URL — typically 50–150 KB per
 {
   "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   "messages": [{ "role": "user", "content": [
-      { "type": "text", "text": "A person (track #4) triggered a 'loiter' event ..." },
+      { "type": "text", "text": "The car outlined in red, in the bottom left of the image, ..." },
       { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,/9j/4AAQ..." } }
   ]}],
   "chat_template_kwargs": { "enable_thinking": false },
