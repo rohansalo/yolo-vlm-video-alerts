@@ -22,8 +22,8 @@ every frame.
 ## Setup
 
 ```powershell
-git clone https://github.com/YOUR-USERNAME/realtime-vision-alerts.git
-cd realtime-vision-alerts
+git clone https://github.com/rohansalo/yolo-vlm-video-alerts.git
+cd yolo-vlm-video-alerts
 python -m venv venv
 .\venv\Scripts\Activate.ps1          # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
